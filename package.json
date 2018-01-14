@@ -1,0 +1,35 @@
+{
+  "name": "homebridge-alarmdecoderplatform",
+  "version": "0.0.1",
+  "description": "Homebridge platform plug to expose AlarmDecoder panel and zones",
+  "license": "apache-2.0",
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge",
+    "homekit"
+  ],
+  "author": "Michael P Maley",
+  "contributors": [
+    "Michael P Maley"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/michaelpmaley/homebridge-alarmdecoderplatform.git"
+  },
+  "bugs": {
+    "url": "http://github.com/michaelpmaley/homebridge-alarmdecoderplatform/issues"
+  },
+  "engines": {
+    "node": ">=0.12.0",
+    "homebridge": ">=0.2.0"
+  },
+  "dependencies": {
+    "request": "^2.83.0",
+    "wait-until": "0.0.2"
+  },
+  "readmeFilename": "README.md",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
