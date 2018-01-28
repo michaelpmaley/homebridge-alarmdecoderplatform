@@ -291,13 +291,11 @@ AlarmDecoderPlatform.prototype.requestHandler = function(request, response) {
          //Zone {zone_name} ({zone}) has been faulted.
          //Zone {zone_name} ({zone}) has been restored.
          } else if (payload.message.indexOf("Zone ") === 0) {
-            // Parse the strings because there is no way to get individual alarmdecoder zone state (unless you check panel_zones_faulted array which seems costly to make another rest call and could become inconsist due to race/time conditions)
+            // Parse the string to get the zone id
             var found = payload.message.match(/^Zone (.+) \((\d+)\) has been (\w*)/);
             if (found != null) {
-               var fullname = found[1];
                var id = found[2];
-               var state = (found[3] === "faulted") ? true : false;
-               this.setHKZoneState(id, state, function(error){}.bind(this));
+               this.syncZoneState(id, function(error){}.bind(this));
             } else {
                this.log.warn("Unable to parse zone notification message");
             }
@@ -507,7 +505,7 @@ AlarmDecoderPlatform.prototype.setADPanelState = function(state, callback) {
  * @param {object} callback - The callback function (error, state).
  */
 AlarmDecoderPlatform.prototype.getADZoneState = function(id, callback) {
-   this.log("GetADZoneState: %s", id);
+   //this.log("GetADZoneState: %s", id);
 
    var accessory = this.accessories.find(function(x) { return x.context.id === id; });
    if (accessory == null) {
