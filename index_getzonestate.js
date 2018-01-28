@@ -342,7 +342,7 @@ AlarmDecoderPlatform.prototype.syncPanelState = function(callback) {
    //this.log("SyncPanelState");
 
    this.getADPanelState(function(error, state) {
-      if (error == null) {
+      if (error != null) {
          callback(error);
          return;
       }
@@ -390,7 +390,7 @@ AlarmDecoderPlatform.prototype.syncZoneState = function(id, callback) {
    //this.log("SyncZoneState: %s", id);
 
    this.getADZoneState(id, function(error, state) {
-      if (error == null) {
+      if (error != null) {
          callback(error);
          return;
       }
