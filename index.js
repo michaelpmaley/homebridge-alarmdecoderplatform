@@ -233,9 +233,9 @@ AlarmDecoderPlatform.prototype.addZones = function() {
          accessory.addService(Service.MotionSensor)
             .setCharacteristic(Characteristic.MotionDetected, false);
 
-      // unknown:
+      // unknown
       } else {
-         this.log.warn("Zone %s has an unknown type %s", id, type);
+         this.log.warn("Zone %s has an unknown type %s", accessory.context.id, accessory.context.ype);
          return;
       }
 
