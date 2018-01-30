@@ -8,7 +8,7 @@ var Accessory, Service, Characteristic, UUIDGen;
  * Homebridge AlarmDecoder platform module.
  * @module homebridge-alarmdecoderplatform
  * @see module:homebridge-alarmdecoderplatform
- * 
+ *
  * A platform plugin registers itself via registerPlatform(pluginName, platformName, constructor, dynamic).
  * On the first instantiation, it adds multiple accessories via registerPlatformAccessories(pluginName, platformName, [accessory]).
  * On subsequent instantiations, cached accessories are reloaded via configureAccessory callback.
@@ -16,6 +16,7 @@ var Accessory, Service, Characteristic, UUIDGen;
  * For this plugin,
  * - AlarmDecoder notifications are handled in requestHandler.
  * - HomeKit SecuritySystem accessory get/set requests are handled in getPanelCurrentState/setPanelTargetState and getZoneCurrentState.
+ * - SPECIAL: Smoke sensors are handled as regular zones, additionally on a "There is a fire!" message all smoke sensors are faulted and on a disarm all are reset.
  */
 module.exports = function(homebridge) {
    console.log("Homebridge API version: " + homebridge.version);
@@ -25,7 +26,7 @@ module.exports = function(homebridge) {
    Characteristic = homebridge.hap.Characteristic;
    UUIDGen = homebridge.hap.uuid;
    // put custom characteristics here
-  
+
    homebridge.registerPlatform("homebridge-alarmdecoderplatform", "AlarmDecoderPlatform", AlarmDecoderPlatform, false);
 }
 
@@ -112,6 +113,24 @@ AlarmDecoderPlatform.prototype.configureAccessory = function(accessory) {
    } else if (accessory.context.type === "motion") {
       var service = accessory.getService(Service.MotionSensor);
       service.getCharacteristic(Characteristic.MotionDetected)
+         .on('get', this.getZoneCurrentState.bind(this, accessory.context.id));
+
+      this.accessories.push(accessory);
+      this.syncZoneState(accessory.context.id, function(error){}.bind(this))
+
+   // co sensor:
+   } else if (accessory.context.type === "co") {
+      var service = accessory.getService(Service.CarbonMonoxideSensor);
+      service.getCharacteristic(Characteristic.CarbonMonoxideDetected)
+         .on('get', this.getZoneCurrentState.bind(this, accessory.context.id));
+
+      this.accessories.push(accessory);
+      this.syncZoneState(accessory.context.id, function(error){}.bind(this))
+
+   // smoke sensor:
+   } else if (accessory.context.type === "smoke") {
+      var service = accessory.getService(Service.SmokeSensor);
+      service.getCharacteristic(Characteristic.SmokeDetected)
          .on('get', this.getZoneCurrentState.bind(this, accessory.context.id));
 
       this.accessories.push(accessory);
@@ -244,6 +263,18 @@ AlarmDecoderPlatform.prototype.addZones = function() {
          service.getCharacteristic(Characteristic.MotionDetected)
             .on('get', this.getZoneCurrentState.bind(this, accessory.context.id));
 
+      // co sensor: add Service.CarbonMonoxideSensor and bind to local functions
+      } else if (accessory.context.type === "co") {
+         var service = accessory.addService(Service.CarbonMonoxideSensor);
+         service.getCharacteristic(Characteristic.CarbonMonoxideDetected)
+            .on('get', this.getZoneCurrentState.bind(this, accessory.context.id));
+
+      // smoke sensor: add Service.SmokeSensor and bind to local functions
+      } else if (accessory.context.type === "smoke") {
+         var service = accessory.addService(Service.SmokeSensor);
+         service.getCharacteristic(Characteristic.SmokeDetected)
+            .on('get', this.getZoneCurrentState.bind(this, accessory.context.id));
+
       // unknown
       } else {
          this.log.warn("Zone %s has an unknown type %s", accessory.context.id, accessory.context.type);
@@ -279,14 +310,31 @@ AlarmDecoderPlatform.prototype.requestHandler = function(request, response) {
          this.log("Notification: %s", data.toString());
          var payload = JSON.parse(data.toString());
 
-         //The alarm system has been triggered on zone {zone_name} ({zone})!
-         //The alarm system has stopped signaling the alarm for zone {zone_name} ({zone}).
-         //The alarm system has been armed.
-         //The alarm system has been disarmed.
+         //The alarm system has been triggered on zone {zone_name} ({zone})!                 .ALARM_TRIGGERED
+         //The alarm system has stopped signaling the alarm for zone {zone_name} ({zone}).   .DISARM
+         //The alarm system has been armed.                                                  .AWAY_ARM or .STAY_ARM
+         //The alarm system has been disarmed.                                               .DISARM
          if (payload.message.indexOf("The alarm system has") === 0) {
             // Don't parse the strings, just get the current alarmdecoder panel state and use it to set the panel accessory state
             this.syncPanelState(function(error){}.bind(this));
 
+            // SPECIAL: turn off smoke sensors
+            var smokesensors = this.accessories.find(function(x) { return x.context.type === "smoke"; });
+            if (smokesensors != null) {
+               smokesensors.forEach(function(smokesensor) {
+                  this.setHKZoneState(smokesensor.id, false, function(error){}.bind(this));
+               }.bind(this));
+            }
+
+         //There is a fire!
+         } else if (payload.message.indexOf("There is a fire!") === 0) {
+            // SPECIAL: turn on all smoke sensors
+            var smokesensors = this.accessories.find(function(x) { return x.context.type === "smoke"; });
+            if (smokesensors != null) {
+               smokesensors.forEach(function(smokesensor) {
+                  this.setHKZoneState(smokesensor.id, true, function(error){}.bind(this));
+               }.bind(this));
+            }
 
          //Zone {zone_name} ({zone}) has been faulted.
          //Zone {zone_name} ({zone}) has been restored.
@@ -331,7 +379,13 @@ AlarmDecoderPlatform.prototype.getPanelCurrentState = function(callback) {
 AlarmDecoderPlatform.prototype.setPanelTargetState = function(state, callback) {
    this.log("SetPanelTargetState: %s", state);
 
-   this.setADPanelState(state, callback);
+  this.setADPanelState(state, function(error, state) {
+      if (error != null) {
+         callback(error);
+         return;
+      }
+      this.setHKPanelState(state, callback);
+   }.bind(this));
 }
 
 
@@ -434,18 +488,18 @@ AlarmDecoderPlatform.prototype.getADPanelState = function(callback) {
       var lastmessage = stateObj.last_message_received;
       if (lastmessage && (lastmessage.includes("NIGHT") || lastmessage.includes("INSTANT")))
          isArmedNight = true;
-      /* 0 = stay, 1 = away, 2 = night, 3 = disarmed, 4 = triggered */
-      var state = 3;
+      /* Characteristic.SecuritySystemCurrentState.STAY_ARM = 0, .AWAY_ARM = 1, .NIGHT_ARM = 2, .DISARMED = 3, .ALARM_TRIGGERED = 4 */
+      var state = Characteristic.SecuritySystemCurrentState.DISARMED; // 3
       if (isAlarming)
-         state = 4;
+         state = Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED; // 4
       else if (isArmedAway && !isArmedNight && !isArmedStay)
-         state = 1;
+         state = Characteristic.SecuritySystemCurrentState.AWAY_ARM;  // 1
       else if (isArmedNight)
-         state = 2;
+         state = Characteristic.SecuritySystemCurrentState.NIGHT_ARM; // 2
       else if (isArmedStay)
-         state = 0;
+         state = Characteristic.SecuritySystemCurrentState.STAY_ARM;  // 0
       else
-         state = 3;
+         state = Characteristic.SecuritySystemCurrentState.DISARMED;  // 3
 
       this.log("current alarmdecoder panel state = %s", state);
       callback(null, state);
@@ -455,7 +509,7 @@ AlarmDecoderPlatform.prototype.getADPanelState = function(callback) {
 
 /**
  * Helper function to set the alarmdecoder panel state.
- * @param {integer} state - The requested security system target state, Characteristic.SecuritySystemTargetState.STAY_ARM = 0, AWAY_ARM = 1, NIGHT_ARM = 2, DISARM = 3.
+* @param {integer} state - The requested security system target state, Characteristic.SecuritySystemTargetState.STAY_ARM = 0, .AWAY_ARM = 1, .NIGHT_ARM = 2, .DISARM = 3
  * @param {object} callback - The callback function (error).
  */
 AlarmDecoderPlatform.prototype.setADPanelState = function(state, callback) {
@@ -495,7 +549,7 @@ AlarmDecoderPlatform.prototype.setADPanelState = function(state, callback) {
       }
 
       this.log("new alarmdecoder panel state = %s", state);
-      setHKPanelState(state, callback);
+      callback(null);
    }.bind(this));
 }
 
@@ -551,6 +605,18 @@ AlarmDecoderPlatform.prototype.getADZoneState = function(id, callback) {
          var mstate = zoneState;
          this.log("current alarmdecoder zone %s state = %s", accessory.context.id, mstate);
          callback(null, mstate);
+
+      // co sensor:
+      if (accessory.context.type === "co") {
+         var costate = zoneState ? Characteristic.CarbonMonoxideDetected.CO_LEVELS_NORMAL : Characteristic.CarbonMonoxideDetected.CO_LEVELS_ABNORMAL;
+         this.log("current alarmdecoder zone %s state = %s", accessory.context.id, costate);
+         callback(null, costate);
+
+      // smoke sensor:
+      if (accessory.context.type === "smoke") {
+         var sstate = zoneState ? Characteristic.SmokeDetected.SMOKE_NOT_DETECTED : Characteristic.SmokeDetected.SMOKE_DETECTED;
+         this.log("current alarmdecoder zone %s state = %s", accessory.context.id, sstate);
+         callback(null, sstate);
 
       // unknown
       } else {
@@ -613,6 +679,22 @@ AlarmDecoderPlatform.prototype.setHKZoneState = function(id, state, callback) {
       //accessory.getService(Service.MotionSensor).getCharacteristic(Characteristic.MotionDetected).setValue(mstate);
       accessory.getService(Service.MotionSensor).getCharacteristic(Characteristic.MotionDetected).updateValue(mstate);
       this.log("new zone %s accessory state = %s", id, mstate);
+      callback(null);
+
+   // co sensor:
+   } else if (accessory.context.type === "co") {
+      var costate = state ? Characteristic.CarbonMonoxideDetected.CO_LEVELS_ABNORMAL : Characteristic.CarbonMonoxideDetected.CO_LEVELS_NORMAL;
+      //accessory.getService(Service.CarbonMonoxideSensor).getCharacteristic(Characteristic.CarbonMonoxideDetected).setValue(costate);
+      accessory.getService(Service.CarbonMonoxideSensor).getCharacteristic(Characteristic.CarbonMonoxideDetected).updateValue(costate);
+      this.log("new zone %s accessory state = %s", id, costate);
+      callback(null);
+
+   // smoke sensor:
+   } else if (accessory.context.type === "smoke") {
+      var sstate = state ? Characteristic.SmokeDetected.SMOKE_DETECTED : Characteristic.SmokeDetected.SMOKE_NOT_DETECTED;
+      //accessory.getService(Service.SmokeSensor).getCharacteristic(Characteristic.SmokeDetected).setValue(sstate);
+      accessory.getService(Service.SmokeSensor).getCharacteristic(Characteristic.SmokeDetected).updateValue(sstate);
+      this.log("new zone %s accessory state = %s", id, sstate);
       callback(null);
 
    // unknown
