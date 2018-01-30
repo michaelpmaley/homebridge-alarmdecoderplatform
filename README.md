@@ -67,9 +67,11 @@ Add the following entry into the Homebridge config.json file platforms array:
   - Change the other values as desired, they are informational only
 - **zones** section = create an entry for each zone in your system using:
   - **id** - the AlarmDecoder zone id; also displayed in the serial number field
-  - **type** - must be either "contact" or "motion"
+  - **type** - must be either "contact" or "motion" or "co" or "smoke"
   - **name** - the name that will be displayed in HomeKit (the room name is prefixed)
   - **fullname** - displayed in the manufacturer field to help differentiate zones because the name is basically generic
+
+**IMPORTANT:** CO and Smoke sensor support has not been tested. Upon receiving a "There is a fire!" message, the code will fault all smoke sensors and when the system is subsequently disarmed, the code will restore all smoke sensors.
 
 ## Configuration - AlarmDecoder
 
@@ -86,18 +88,33 @@ Create an AlarmDecoder notification with the following values:
     - **Custom Key** = "message"   (do not include the quotes)
     - **Custom Value** = "{{message}}"   (do not include the quotes)
 
-**IMPORTANT:** Assumes the default message strings, so don't customize them. For reference:
-- The AlarmDecoder has finished booting.
+Notification events, for reference:
+- Alarm system is triggered
+- Alarm system stops signaling
+- A panic has been detected
+- A fire is detected
+- Alarm system is armed
+- Alarm system is disarmed
+- A zone is faulted
+- A zone has been restored
+- A zone has been bypassed
+- Power status has changed
+- A low battery has been detected
+- The AlarmDecoder has rebooted
+- A relay has changed
+
+**IMPORTANT:** Assumes the default message strings, so don't customize them. Default message strings, for reference:
 - The alarm system has been triggered on zone {zone_name} ({zone})!
 - The alarm system has stopped signaling the alarm for zone {zone_name} ({zone}).
 - The alarm system has been armed.
+- The AlarmDecoder has finished booting.
+- A zone has been bypassed.
 - The alarm system has been disarmed.
 - There is a fire!
 - Low battery detected.
 - Panic!
 - Power status has changed to {status}.
 - A relay has changed.
-- A zone has been bypassed.
 - Zone {zone_name} ({zone}) has been faulted.
 - Zone {zone_name} ({zone}) has been restored.
 
@@ -105,8 +122,8 @@ Create an AlarmDecoder notification with the following values:
 
 - https://github.com/nfarina/homebridge#writing-plugins
 - https://github.com/aficustree/homebridge-alarmdecoder   (this was my main starting point)
-- http://blog.theodo.fr/2017/08/make-siri-perfect-home-companion-devices-not-supported-apple-homekit/ 
-- https://github.com/nfarina/homebridge/blob/master/example-plugins/homebridge-samplePlatform/index.js 
+- http://blog.theodo.fr/2017/08/make-siri-perfect-home-companion-devices-not-supported-apple-homekit/
+- https://github.com/nfarina/homebridge/blob/master/example-plugins/homebridge-samplePlatform/index.js
 - https://github.com/KhaosT/HAP-NodeJS/blob/master/lib/gen/HomeKitTypes.js
 - and other various Homebridge plugins on GitHub
 
@@ -117,5 +134,5 @@ Create an AlarmDecoder notification with the following values:
 
 ## Issues
 
-- Very infrequently AlarmDecoder missed an event. Added and modified logging in /opt/alarmdecoder-webapp/ad2web/notifications/types.py to watch what was going on. 
+- Very infrequently AlarmDecoder missed an event. Added and modified logging in /opt/alarmdecoder-webapp/ad2web/notifications/types.py to watch what was going on.
 - iOS notifications are inconsistent. Could be local networking, Homekit, Homebridge to Homekit/Home app communication (.updateValue changes).
