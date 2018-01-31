@@ -357,7 +357,7 @@ AlarmDecoderPlatform.prototype.getPanelCurrentState = function(callback) {
 AlarmDecoderPlatform.prototype.setPanelTargetState = function(state, callback) {
    this.log("SetPanelTargetState: %s", state);
 
-   this.setADPanelState(state, function(error, state) {
+   this.setADPanelState(state, function(error) {
       if (error != null) {
          callback(error);
          return;

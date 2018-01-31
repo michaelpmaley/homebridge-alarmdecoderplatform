@@ -379,7 +379,7 @@ AlarmDecoderPlatform.prototype.getPanelCurrentState = function(callback) {
 AlarmDecoderPlatform.prototype.setPanelTargetState = function(state, callback) {
    this.log("SetPanelTargetState: %s", state);
 
-  this.setADPanelState(state, function(error, state) {
+   this.setADPanelState(state, function(error) {
       if (error != null) {
          callback(error);
          return;
@@ -509,7 +509,7 @@ AlarmDecoderPlatform.prototype.getADPanelState = function(callback) {
 
 /**
  * Helper function to set the alarmdecoder panel state.
-* @param {integer} state - The requested security system target state, Characteristic.SecuritySystemTargetState.STAY_ARM = 0, .AWAY_ARM = 1, .NIGHT_ARM = 2, .DISARM = 3
+ * @param {integer} state - The requested security system target state, Characteristic.SecuritySystemTargetState.STAY_ARM = 0, .AWAY_ARM = 1, .NIGHT_ARM = 2, .DISARM = 3
  * @param {object} callback - The callback function (error).
  */
 AlarmDecoderPlatform.prototype.setADPanelState = function(state, callback) {
@@ -607,13 +607,13 @@ AlarmDecoderPlatform.prototype.getADZoneState = function(id, callback) {
          callback(null, mstate);
 
       // co sensor:
-      if (accessory.context.type === "co") {
+      } else if (accessory.context.type === "co") {
          var costate = zoneState ? Characteristic.CarbonMonoxideDetected.CO_LEVELS_NORMAL : Characteristic.CarbonMonoxideDetected.CO_LEVELS_ABNORMAL;
          this.log("current alarmdecoder zone %s state = %s", accessory.context.id, costate);
          callback(null, costate);
 
       // smoke sensor:
-      if (accessory.context.type === "smoke") {
+      } else if (accessory.context.type === "smoke") {
          var sstate = zoneState ? Characteristic.SmokeDetected.SMOKE_NOT_DETECTED : Characteristic.SmokeDetected.SMOKE_DETECTED;
          this.log("current alarmdecoder zone %s state = %s", accessory.context.id, sstate);
          callback(null, sstate);
